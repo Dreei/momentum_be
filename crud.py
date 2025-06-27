@@ -3,24 +3,40 @@ from schemas import ProjectInviteRequest, UserInvite
 from email_utils import EmailService
 from supabase import create_client
 import uuid
-from sklearn.cluster import KMeans
-import numpy as np
+import os
+from dotenv import load_dotenv
 import google.generativeai as genai
+
+# Load environment variables
+load_dotenv()
+
 # Import ML and AI libraries with error handling
 try:
-    
+    from sklearn.cluster import KMeans
+    import numpy as np
     ML_AVAILABLE = True
-    GEMINI_AVAILABLE = True
-    # Configure Gemini
-    GEMINI_API_KEY = "AIzaSyDCR2OIefMry0tuTbvNM4mRPDxQpl2BIRw"
-    genai.configure(api_key=GEMINI_API_KEY)
 except ImportError as e:
-    print(f"Warning: Some ML/AI libraries not available: {e}")
+    print(f"Warning: ML libraries not available: {e}")
     ML_AVAILABLE = False
+
+try:
+    GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+    if GEMINI_API_KEY:
+        genai.configure(api_key=GEMINI_API_KEY)
+        GEMINI_AVAILABLE = True
+    else:
+        print("Warning: GEMINI_API_KEY not found in environment variables")
+        GEMINI_AVAILABLE = False
+except ImportError as e:
+    print(f"Warning: Gemini AI library not available: {e}")
     GEMINI_AVAILABLE = False
 
-SUPABASE_URL = "https://clpsxwgujflkbqtnxdca.supabase.co"
-SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImNscHN4d2d1amZsa2JxdG54ZGNhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDkwNDcwMjIsImV4cCI6MjA2NDYyMzAyMn0.FU6LugpZ1T5Dvbc49lj5kWa8rb31uIFCydtlHAibEAg"
+# Get Supabase credentials from environment variables
+SUPABASE_URL = os.getenv("SUPABASE_URL")
+SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+
+if not SUPABASE_URL or not SUPABASE_KEY:
+    raise ValueError("SUPABASE_URL and SUPABASE_KEY must be set in environment variables")
 
 # Initialize Supabase client
 supabase = create_client(SUPABASE_URL, SUPABASE_KEY)

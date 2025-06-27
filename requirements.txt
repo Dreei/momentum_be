@@ -1,37 +1,41 @@
+# =============================================================================
+# PRODUCTION REQUIREMENTS - SECURE FOR RENDER DEPLOYMENT
+# =============================================================================
+# All versions are pinned for security and reproducibility
+# Last updated: 2024-01-XX
+
 # Core FastAPI and Web Framework
-fastapi==0.103.2
-uvicorn[standard]==0.23.2
-pydantic==2.4.2
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+pydantic==2.5.2
 python-multipart==0.0.6
 
 # Database and Storage
-supabase==2.0.2
-sqlalchemy==2.0.23
+supabase==2.3.4
+sqlalchemy==2.0.25
 psycopg2-binary==2.9.9
 
 # Authentication and Security
 python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 python-dotenv==1.0.0
+cryptography==41.0.8
 
 # HTTP Requests and API
 requests==2.31.0
-httpx==0.25.2
+httpx==0.26.0
+urllib3==2.1.0
 
 # AI and Machine Learning
 google-generativeai==0.3.2
 scikit-learn==1.3.2
-numpy==1.24.4
+numpy==1.26.2
 
 # Date and Time Handling
 python-dateutil==2.8.2
 
 # JSON and Data Processing
-ujson==5.8.0
-
-# Development and Testing
-pytest==7.4.3
-pytest-asyncio==0.21.1
+ujson==5.9.0
 
 # Environment and Configuration
 pydantic-settings==2.1.0
@@ -40,7 +44,32 @@ pydantic-settings==2.1.0
 aiofiles==23.2.1
 
 # Type Hints and Validation
-typing-extensions==4.8.0
+typing-extensions==4.9.0
 
 # Additional utilities
-email-validator==2.1.0 
+email-validator==2.1.0
+
+# Security and Monitoring (Production essentials)
+python-multipart==0.0.6
+secure==0.3.0
+
+# Development and Testing (Optional - can be moved to requirements-dev.txt)
+pytest==7.4.4
+pytest-asyncio==0.23.2
+
+# =============================================================================
+# ENVIRONMENT VARIABLES REQUIRED FOR PRODUCTION:
+# =============================================================================
+# SUPABASE_URL=your_supabase_url
+# SUPABASE_KEY=your_supabase_anon_key
+# GEMINI_API_KEY=your_gemini_api_key
+# SECRET_KEY=your_secret_key_for_jwt
+# SMTP_USERNAME=your_smtp_username
+# SMTP_PASSWORD=your_smtp_password
+# RECALL_API_TOKEN=your_recall_api_token
+# RECALL_WEBHOOK_SECRET=your_webhook_secret
+# ZOOM_CLIENT_ID=your_zoom_client_id
+# ZOOM_CLIENT_SECRET=your_zoom_client_secret
+# ENVIRONMENT=production
+# DEBUG=false
+# ============================================================================= 

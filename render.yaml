@@ -1,0 +1,80 @@
+# =============================================================================
+# RENDER DEPLOYMENT CONFIGURATION
+# =============================================================================
+# This file configures your Render deployment
+# See: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: momentum-backend
+    env: python
+    region: oregon # or your preferred region
+    plan: starter # upgrade to standard or pro for production
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    
+    # Environment variables (set these in Render Dashboard)
+    envVars:
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: false
+      - key: PYTHONUNBUFFERED
+        value: 1
+      - key: PYTHONDONTWRITEBYTECODE
+        value: 1
+      
+      # Database (set actual values in Render Dashboard)
+      - key: SUPABASE_URL
+        sync: false  # Set manually in dashboard
+      - key: SUPABASE_KEY
+        sync: false  # Set manually in dashboard
+      - key: SUPABASE_JWT_SECRET
+        sync: false  # Set manually in dashboard
+      
+      # Security
+      - key: SECRET_KEY
+        generateValue: true  # Render will generate a secure key
+      
+      # AI Services
+      - key: GEMINI_API_KEY
+        sync: false  # Set manually in dashboard
+      
+      # Email Configuration
+      - key: SMTP_USERNAME
+        sync: false  # Set manually in dashboard
+      - key: SMTP_PASSWORD
+        sync: false  # Set manually in dashboard
+      - key: FROM_EMAIL
+        sync: false  # Set manually in dashboard
+      
+      # OAuth
+      - key: GOOGLE_CLIENT_ID
+        sync: false  # Set manually in dashboard
+      - key: ZOOM_CLIENT_ID
+        sync: false  # Set manually in dashboard
+      - key: ZOOM_CLIENT_SECRET
+        sync: false  # Set manually in dashboard
+      
+      # Recall.ai
+      - key: RECALL_API_TOKEN
+        sync: false  # Set manually in dashboard
+      - key: RECALL_WEBHOOK_SECRET
+        sync: false  # Set manually in dashboard
+      
+      # Dynamic URLs (will be set based on your Render service URL)
+      - key: ZOOM_REDIRECT_URI
+        value: https://momentum-backend.onrender.com/zoom/callback
+      - key: RECALL_WEBHOOK_URL
+        value: https://momentum-backend.onrender.com/api/recall/webhook
+
+# =============================================================================
+# DEPLOYMENT NOTES:
+# =============================================================================
+# 1. Connect your GitHub repo to Render
+# 2. Set environment variables in Render Dashboard
+# 3. Update ZOOM_REDIRECT_URI and RECALL_WEBHOOK_URL with your actual domain
+# 4. Consider using Render's PostgreSQL add-on if needed
+# 5. Monitor logs and metrics in Render Dashboard
+# ============================================================================= 
