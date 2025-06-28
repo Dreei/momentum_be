@@ -77,6 +77,25 @@ except Exception as e:
     print(f"❌ Failed to initialize Supabase client: {e}")
     supabase = None
 
+# Define lifespan event handler
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize services on startup and cleanup on shutdown"""
+    # Startup
+    print("🚀 Starting Momentum AI API...")
+    print(f"📊 Loaded routers: {routers_loaded}")
+    if router_errors:
+        print(f"⚠️  Router errors: {router_errors}")
+    print(f"🤖 ML available: {ML_AVAILABLE}")
+    print(f"🧠 Gemini available: {GEMINI_AVAILABLE}")
+    print(f"📖 Documentation: http://localhost:8000/docs")
+    print(f"🔍 Status: http://localhost:8000/status")
+    
+    yield
+    
+    # Shutdown
+    print("🛑 Shutting down Momentum AI API...")
+
 # Create app
 app = FastAPI(
     title="Meeting Management API",
@@ -275,24 +294,6 @@ async def test_import():
         "loaded_routers": routers_loaded,
         "errors": router_errors
           }
-  
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Initialize services on startup and cleanup on shutdown"""
-    # Startup
-    print("🚀 Starting Momentum AI API...")
-    print(f"📊 Loaded routers: {routers_loaded}")
-    if router_errors:
-        print(f"⚠️  Router errors: {router_errors}")
-    print(f"🤖 ML available: {ML_AVAILABLE}")
-    print(f"🧠 Gemini available: {GEMINI_AVAILABLE}")
-    print(f"📖 Documentation: http://localhost:8000/docs")
-    print(f"🔍 Status: http://localhost:8000/status")
-    
-    yield
-    
-    # Shutdown
-    print("🛑 Shutting down Momentum AI API...")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
