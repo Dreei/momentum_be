@@ -448,6 +448,13 @@ async def process_structured_summary(
         if result["status"] == "error":
             raise HTTPException(status_code=500, detail=result["error"])
         
+        # Update meeting status to completed
+        supabase.table("meetings") \
+            .update({"meeting_status": "completed"}) \
+            .eq("meeting_id", meeting_id) \
+            .execute()
+        
+        
         return result
         
     except Exception as e:
