@@ -57,13 +57,13 @@ async def get_user_notifications(
             "status": notification.get("status"),
             "created_at": notification.get("created_at"),
             "updated_at": notification.get("updated_at"),
-            # Additional fields
+            # Human-readable fields instead of UUIDs
             "meeting_title": meeting.get("title", ""),
-            "project_title": project.get("project_name", ""),
+            "project_name": project.get("project_name", ""),
             "organization_name": organization.get("org_name", ""),
+            "creator_name": f"{creator.get('first_name', '')} {creator.get('last_name', '')}".strip(),
             "creator_first_name": creator.get("first_name", ""),
-            "creator_last_name": creator.get("last_name", ""),
-            "creator_name": f"{creator.get('first_name', '')} {creator.get('last_name', '')}".strip()
+            "creator_last_name": creator.get("last_name", "")
         }
         notifications.append(transformed_notification)
     

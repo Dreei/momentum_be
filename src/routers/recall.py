@@ -79,6 +79,22 @@ async def start_recording(
             webhook_url=webhook_url
         )
         
+        # Update meeting with bot_id after successful recording start
+        if result and "botId" in result:
+            bot_id = result["botId"]
+            print(f"Updating meeting {meeting_id} with bot_id: {bot_id}")
+            
+            # Update the meeting record with the bot_id
+            update_response = supabase.table("meetings") \
+                .update({"bot_id": bot_id}) \
+                .eq("meeting_id", meeting_id) \
+                .execute()
+            
+            if update_response.data:
+                print(f"Successfully updated meeting {meeting_id} with bot_id {bot_id}")
+            else:
+                print(f"Warning: Failed to update meeting {meeting_id} with bot_id {bot_id}")
+        
         return result
         
     except Exception as e:
@@ -87,7 +103,6 @@ async def start_recording(
 
 @router.post("/stop-recording")
 async def stop_recording(
-    bot_id: str = Query(..., description="Bot ID to stop"),
     meeting_id: str = Query(..., description="Meeting ID"),
     supabase: Client = Depends(get_supabase)
 ):
@@ -95,7 +110,6 @@ async def stop_recording(
     Stop a Recall.ai bot recording.
     
     Args:
-        bot_id (str): ID of the bot to stop
         meeting_id (str): ID of the meeting
         supabase (Client): Supabase client
         
@@ -106,11 +120,25 @@ async def stop_recording(
             }
     """
     try:
+        # Get meeting and bot_id
+        meeting_response = supabase.table("meetings") \
+            .select("*") \
+            .eq("meeting_id", meeting_id) \
+            .execute()
+        
+        if not meeting_response.data:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        meeting = meeting_response.data[0]
+        bot_id = meeting.get("bot_id")
+        
+        if not bot_id:
+            raise HTTPException(status_code=400, detail="No bot ID found for this meeting")
+        
         # Verify session exists
         session_response = supabase.table("recall_sessions") \
             .select("*") \
             .eq("bot_id", bot_id) \
-            .eq("meeting_id", meeting_id) \
             .execute()
         
         if not session_response.data:
@@ -128,14 +156,14 @@ async def stop_recording(
 
 @router.get("/recording-state")
 async def get_recording_state(
-    bot_id: str = Query(..., description="Bot ID to check"),
+    meeting_id: str = Query(..., description="Meeting ID"),
     supabase: Client = Depends(get_supabase)
 ):
     """
     Get the current state of a Recall.ai bot recording.
     
     Args:
-        bot_id (str): ID of the bot to check
+        meeting_id (str): ID of the meeting
         supabase (Client): Supabase client
         
     Returns:
@@ -146,6 +174,21 @@ async def get_recording_state(
             }
     """
     try:
+        # Get meeting and bot_id
+        meeting_response = supabase.table("meetings") \
+            .select("*") \
+            .eq("meeting_id", meeting_id) \
+            .execute()
+        
+        if not meeting_response.data:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        meeting = meeting_response.data[0]
+        bot_id = meeting.get("bot_id")
+        
+        if not bot_id:
+            raise HTTPException(status_code=400, detail="No bot ID found for this meeting")
+        
         # Verify session exists
         session_response = supabase.table("recall_sessions") \
             .select("*") \
@@ -227,7 +270,7 @@ async def handle_transcription_webhook(
 
 @router.post("/summarize")
 async def summarize_transcript(
-    bot_id: str = Query(..., description="Bot ID for transcript"),
+    meeting_id: str = Query(..., description="Meeting ID"),
     prompt_type: str = Query("general_summary", description="Type of summary to generate"),
     supabase: Client = Depends(get_supabase)
 ):
@@ -235,7 +278,7 @@ async def summarize_transcript(
     Generate a summary of the meeting transcript using AI.
     
     Args:
-        bot_id (str): ID of the bot whose transcript to summarize
+        meeting_id (str): ID of the meeting
         prompt_type (str): Type of summary (general_summary, action_items, decisions, next_steps, key_takeaways)
         supabase (Client): Supabase client
         
@@ -246,6 +289,21 @@ async def summarize_transcript(
             }
     """
     try:
+        # Get meeting and bot_id
+        meeting_response = supabase.table("meetings") \
+            .select("*") \
+            .eq("meeting_id", meeting_id) \
+            .execute()
+        
+        if not meeting_response.data:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        meeting = meeting_response.data[0]
+        bot_id = meeting.get("bot_id")
+        
+        if not bot_id:
+            raise HTTPException(status_code=400, detail="No bot ID found for this meeting")
+        
         # Verify session exists
         session_response = supabase.table("recall_sessions") \
             .select("*") \
@@ -329,7 +387,6 @@ async def get_meeting_sessions(
 @router.post("/process-structured-summary")
 async def process_structured_summary(
     meeting_id: str = Query(..., description="Meeting ID"),
-    bot_id: str = Query(..., description="Bot ID for transcript"),
     user_id: str = Query(..., description="User ID requesting summary"),
     supabase: Client = Depends(get_supabase)
 ):
@@ -342,7 +399,6 @@ async def process_structured_summary(
     
     Args:
         meeting_id (str): ID of the meeting
-        bot_id (str): ID of the bot whose transcript to process
         user_id (str): ID of the user requesting the summary
         supabase (Client): Supabase client
         
@@ -357,7 +413,7 @@ async def process_structured_summary(
             }
     """
     try:
-        # Verify meeting exists
+        # Verify meeting exists and get bot_id
         meeting_response = supabase.table("meetings") \
             .select("*") \
             .eq("meeting_id", meeting_id) \
@@ -365,6 +421,12 @@ async def process_structured_summary(
         
         if not meeting_response.data:
             raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        meeting = meeting_response.data[0]
+        bot_id = meeting.get("bot_id")
+        
+        if not bot_id:
+            raise HTTPException(status_code=400, detail="No bot ID found for this meeting")
         
         # Verify user exists
         user_response = supabase.table("users") \
@@ -453,7 +515,6 @@ async def get_structured_summary(
 @router.post("/auto-process-meeting/{meeting_id}")
 async def auto_process_meeting(
     meeting_id: str,
-    bot_id: str = Query(..., description="Bot ID for transcript"),
     user_id: str = Query(..., description="User ID"),
     supabase: Client = Depends(get_supabase)
 ):
@@ -465,7 +526,6 @@ async def auto_process_meeting(
     
     Args:
         meeting_id (str): ID of the meeting
-        bot_id (str): ID of the bot recording the meeting
         user_id (str): ID of the user who started the meeting
         supabase (Client): Supabase client
         
@@ -480,7 +540,7 @@ async def auto_process_meeting(
             }
     """
     try:
-        # Verify meeting exists
+        # Verify meeting exists and get bot_id
         meeting_response = supabase.table("meetings") \
             .select("*, projects!inner(*, organizations!inner(*))") \
             .eq("meeting_id", meeting_id) \
@@ -490,6 +550,10 @@ async def auto_process_meeting(
             raise HTTPException(status_code=404, detail="Meeting not found")
         
         meeting = meeting_response.data[0]
+        bot_id = meeting.get("bot_id")
+        
+        if not bot_id:
+            raise HTTPException(status_code=400, detail="No bot ID found for this meeting")
         
         # Update meeting status to indicate processing
         supabase.table("meetings") \
@@ -646,8 +710,35 @@ async def get_meeting_transcript(
                 if "words" in transcript_data:
                     # Process word-level transcript
                     words = transcript_data.get("words", [])
-                    speaker = transcript_data.get("speaker", "Unknown")
-                    timestamp = transcript_data.get("timestamp", "00:00")
+                    
+                    # Handle speaker information - check both 'speaker' and 'participant' fields
+                    speaker = "Unknown"
+                    if "speaker" in transcript_data:
+                        speaker = transcript_data.get("speaker", "Unknown")
+                    elif "participant" in transcript_data:
+                        participant = transcript_data.get("participant", {})
+                        if isinstance(participant, dict):
+                            speaker = participant.get("name", "Unknown")
+                        else:
+                            speaker = str(participant)
+                    
+                    # Extract timestamp - use first word's start timestamp if available
+                    timestamp = "00:00"
+                    if words and len(words) > 0:
+                        first_word = words[0]
+                        if "start_timestamp" in first_word:
+                            start_ts = first_word["start_timestamp"]
+                            if isinstance(start_ts, dict) and "relative" in start_ts:
+                                # Convert relative timestamp (seconds) to MM:SS format
+                                seconds = start_ts["relative"]
+                                minutes = int(seconds // 60)
+                                secs = int(seconds % 60)
+                                timestamp = f"{minutes:02d}:{secs:02d}"
+                            elif isinstance(start_ts, dict) and "absolute" in start_ts:
+                                # Use absolute timestamp as fallback
+                                timestamp = start_ts["absolute"]
+                    elif "timestamp" in transcript_data:
+                        timestamp = transcript_data.get("timestamp", "00:00")
                     
                     if words:
                         text = " ".join([word.get("text", "") for word in words])
@@ -655,7 +746,8 @@ async def get_meeting_transcript(
                             "speaker": speaker,
                             "text": text,
                             "timestamp": timestamp,
-                            "created_at": transcript["created_at"]
+                            "created_at": transcript["created_at"],
+                            "word_count": len(words)
                         })
                 else:
                     # If it's a different format, try to extract what we can

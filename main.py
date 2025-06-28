@@ -5,6 +5,7 @@ from pathlib import Path
 import uvicorn
 import traceback
 import google.generativeai as genai
+from contextlib import asynccontextmanager
 from src.core.config import GEMINI_API_KEY
 from fastapi import FastAPI, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -81,12 +82,13 @@ app = FastAPI(
     title="Meeting Management API",
     version="1.0.0",
     description="API for managing meetings, organizations, and projects with automated notifications",
+    lifespan=lifespan,
 )
 
 # Simple CORS setup
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=["http://localhost:5173"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -272,11 +274,12 @@ async def test_import():
         "message": "Import test successful",
         "loaded_routers": routers_loaded,
         "errors": router_errors
-    }
-
-@app.on_event("startup") 
-async def startup_event():
-    """Initialize services on startup"""
+          }
+  
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Initialize services on startup and cleanup on shutdown"""
+    # Startup
     print("🚀 Starting Momentum AI API...")
     print(f"📊 Loaded routers: {routers_loaded}")
     if router_errors:
@@ -285,6 +288,11 @@ async def startup_event():
     print(f"🧠 Gemini available: {GEMINI_AVAILABLE}")
     print(f"📖 Documentation: http://localhost:8000/docs")
     print(f"🔍 Status: http://localhost:8000/status")
+    
+    yield
+    
+    # Shutdown
+    print("🛑 Shutting down Momentum AI API...")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

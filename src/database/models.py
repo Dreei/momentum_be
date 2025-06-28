@@ -76,7 +76,7 @@ class Meeting(Base):
     agenda_generated = Column(Boolean, default=False)
     meeting_status = Column(Enum("scheduled", "started", "processing", "completed", "cancelled", "error", name="meeting_status"), default="scheduled")
     manual_meeting_link = Column(Text)
-    recall_bot_id = Column(Text, nullable=True)  # Recall.ai bot ID
+    bot_id = Column(Text, nullable=True)  # Recall.ai bot ID
     ai_processing_enabled = Column(Boolean, default=False)
     ai_processing_status = Column(Enum("pending", "processing", "completed", "error", name="ai_processing_status"), default="pending")
     summary_id = Column(UUID(as_uuid=True), ForeignKey("meeting_summaries.summary_id"), nullable=True)

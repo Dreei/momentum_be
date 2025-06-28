@@ -1,4 +1,3 @@
-
 from typing import List, Optional, Dict
 from pydantic import BaseModel, EmailStr, Field
 from enum import Enum
@@ -52,5 +51,8 @@ class SaveLinkRequest(BaseModel):
 
 class GenerateContextGroupsRequest(BaseModel):
     user_id: str = Field(..., description="ID of the user triggering the grouping")
+
+class MeetingBotUpdateRequest(BaseModel):
+    bot_id: str = Field(..., description="Bot ID to associate with the meeting")
 
 

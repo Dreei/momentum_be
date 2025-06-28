@@ -6,6 +6,7 @@ from typing import List
 from datetime import datetime
 from pydantic import BaseModel
 from services.email_service import EmailService, MeetingInviteData
+from schemas import MeetingBotUpdateRequest
 
 router = APIRouter()
 email_service = EmailService()
@@ -25,6 +26,7 @@ class MeetingCreate(BaseModel):
     description: str = None
     agenda: List[str]
     meeting_link: str
+    bot_id: str = None  # Optional bot ID for recall.ai integration
 
 
 """
@@ -78,6 +80,7 @@ def create_meeting(meeting: MeetingCreate, user_id: uuid.UUID = Query(...), supa
             "meeting_status": "scheduled",
             "agenda_generated": False,
             "manual_meeting_link": meeting.meeting_link,
+            "bot_id": meeting.bot_id,  # Store bot ID if provided
         }
         
         
@@ -256,7 +259,8 @@ def get_project_meetings(project_id: uuid.UUID, supabase: Client = Depends(get_s
         "scheduled_at": m["scheduled_at"],
         "meeting_status": m["meeting_status"],
         "created_at": m["created_at"],
-        "created_by": m["created_by"]
+        "created_by": m["created_by"],
+        "bot_id": m["bot_id"]  # Include bot ID in response
     } for m in meetings_response.data]
 
 
@@ -352,6 +356,7 @@ def get_meeting_details(meeting_id: uuid.UUID, supabase: Client = Depends(get_su
         "created_at": meeting["created_at"],
         "agenda_generated": meeting["agenda_generated"],
         "manual_meeting_link": meeting["manual_meeting_link"],
+        "bot_id": meeting["bot_id"],  # Include bot ID in response
         "creator": {
             "user_id": str(creator["user_id"]),
             "first_name": creator["first_name"],
@@ -382,4 +387,295 @@ def get_meeting_details(meeting_id: uuid.UUID, supabase: Client = Depends(get_su
             "created_at": a["created_at"]
         } for a in agendas]
     }
+
+
+"""
+[PUT]
+/meetings/{meeting_id}/bot:
+Update the bot_id for an existing meeting.
+
+Args:
+    meeting_id (uuid.UUID): Meeting ID.
+    bot_update (MeetingBotUpdateRequest): Bot update data containing bot_id.
+    supabase (Client): Supabase client (injected).
+
+Returns:
+    dict: Status message and updated meeting info.
+"""
+@router.put("/{meeting_id}/bot")
+def update_meeting_bot_id(
+    meeting_id: uuid.UUID, 
+    bot_update: MeetingBotUpdateRequest, 
+    supabase: Client = Depends(get_supabase)
+):
+    try:
+        # Verify meeting exists
+        meeting_response = supabase.table("meetings").select("*").eq("meeting_id", str(meeting_id)).execute()
+        if not meeting_response.data:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        # Update the meeting with the bot_id
+        update_data = {"bot_id": bot_update.bot_id}
+        update_response = supabase.table("meetings") \
+            .update(update_data) \
+            .eq("meeting_id", str(meeting_id)) \
+            .execute()
+        
+        if not update_response.data:
+            raise HTTPException(status_code=500, detail="Failed to update meeting bot_id")
+        
+        return {
+            "status": "success", 
+            "message": "Meeting bot_id updated successfully",
+            "meeting_id": str(meeting_id),
+            "bot_id": bot_update.bot_id
+        }
+        
+    except Exception as e:
+        print(f"Error updating meeting bot_id: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+"""
+[GET]
+/meetings/{meeting_id}/bot:
+Get the bot_id for a specific meeting.
+
+Args:
+    meeting_id (uuid.UUID): Meeting ID.
+    supabase (Client): Supabase client (injected).
+
+Returns:
+    dict: Bot ID information for the meeting.
+"""
+@router.get("/{meeting_id}/bot")
+def get_meeting_bot_id(meeting_id: uuid.UUID, supabase: Client = Depends(get_supabase)):
+    try:
+        # Get meeting details
+        meeting_response = supabase.table("meetings") \
+            .select("meeting_id, title, bot_id") \
+            .eq("meeting_id", str(meeting_id)) \
+            .execute()
+        
+        if not meeting_response.data:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        meeting = meeting_response.data[0]
+        
+        return {
+            "meeting_id": str(meeting["meeting_id"]),
+            "title": meeting["title"],
+            "bot_id": meeting["bot_id"]
+        }
+        
+    except Exception as e:
+        print(f"Error getting meeting bot_id: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+"""
+[GET]
+/meetings/{meeting_id}/transcript:
+Get the transcript for a specific meeting.
+
+Args:
+    meeting_id (uuid.UUID): Meeting ID.
+    supabase (Client): Supabase client (injected).
+
+Returns:
+    dict: Meeting transcript data with processed entries.
+"""
+@router.get("/{meeting_id}/transcript")
+def get_meeting_transcript(meeting_id: uuid.UUID, supabase: Client = Depends(get_supabase)):
+    try:
+        # Verify meeting exists
+        meeting_response = supabase.table("meetings").select("*").eq("meeting_id", str(meeting_id)).execute()
+        if not meeting_response.data:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        meeting = meeting_response.data[0]
+        
+        # Get transcripts for the meeting
+        transcript_response = supabase.table("meeting_transcripts") \
+            .select("*") \
+            .eq("meeting_id", str(meeting_id)) \
+            .order("created_at", desc=False) \
+            .execute()
+        
+        transcripts = transcript_response.data if transcript_response.data else []
+        
+        if not transcripts:
+            return {
+                "status": "not_found",
+                "message": "No transcript data available for this meeting",
+                "meeting_info": {
+                    "meeting_id": str(meeting_id),
+                    "title": meeting["title"],
+                    "scheduled_at": meeting["scheduled_at"],
+                    "meeting_status": meeting["meeting_status"]
+                },
+                "transcript": []
+            }
+        
+        # Process transcript data into a readable format
+        processed_transcript = []
+        total_entries = 0
+        
+        for transcript_entry in transcripts:
+            transcript_data = transcript_entry["transcript_data"]
+            bot_id = transcript_entry.get("bot_id")
+            created_at = transcript_entry["created_at"]
+            
+            # Handle different transcript data formats from Recall.ai
+            if isinstance(transcript_data, dict):
+                # Single transcript entry
+                if "words" in transcript_data:
+                    # Word-level transcript data
+                    words = transcript_data.get("words", [])
+                    
+                    # Handle speaker information - check both 'speaker' and 'participant' fields
+                    speaker = "Unknown"
+                    if "speaker" in transcript_data:
+                        speaker = transcript_data.get("speaker", "Unknown")
+                    elif "participant" in transcript_data:
+                        participant = transcript_data.get("participant", {})
+                        if isinstance(participant, dict):
+                            speaker = participant.get("name", "Unknown")
+                        else:
+                            speaker = str(participant)
+                    
+                    # Extract timestamp - use first word's start timestamp if available
+                    timestamp = "00:00"
+                    if words and len(words) > 0:
+                        first_word = words[0]
+                        if "start_timestamp" in first_word:
+                            start_ts = first_word["start_timestamp"]
+                            if isinstance(start_ts, dict) and "relative" in start_ts:
+                                # Convert relative timestamp (seconds) to MM:SS format
+                                seconds = start_ts["relative"]
+                                minutes = int(seconds // 60)
+                                secs = int(seconds % 60)
+                                timestamp = f"{minutes:02d}:{secs:02d}"
+                            elif isinstance(start_ts, dict) and "absolute" in start_ts:
+                                # Use absolute timestamp as fallback
+                                timestamp = start_ts["absolute"]
+                    elif "timestamp" in transcript_data:
+                        timestamp = transcript_data.get("timestamp", "00:00")
+                    
+                    if words:
+                        text = " ".join([word.get("text", "") for word in words if word.get("text")])
+                        if text.strip():  # Only add non-empty text
+                            processed_transcript.append({
+                                "speaker": speaker,
+                                "text": text.strip(),
+                                "timestamp": timestamp,
+                                "created_at": created_at,
+                                "entry_type": "speech",
+                                "word_count": len(words)
+                            })
+                            total_entries += 1
+                elif "text" in transcript_data:
+                    # Direct text format
+                    text = transcript_data.get("text", "").strip()
+                    if text:
+                        processed_transcript.append({
+                            "speaker": transcript_data.get("speaker", "Unknown"),
+                            "text": text,
+                            "timestamp": transcript_data.get("timestamp", "00:00"),
+                            "created_at": created_at,
+                            "entry_type": "speech"
+                        })
+                        total_entries += 1
+                        
+            elif isinstance(transcript_data, list):
+                # Multiple transcript entries in one record
+                for entry in transcript_data:
+                    if isinstance(entry, dict):
+                        text = entry.get("text", "").strip()
+                        if text:
+                            processed_transcript.append({
+                                "speaker": entry.get("speaker", "Unknown"),
+                                "text": text,
+                                "timestamp": entry.get("timestamp", "00:00"),
+                                "created_at": created_at,
+                                "entry_type": "speech"
+                            })
+                            total_entries += 1
+        
+        # Sort by timestamp if available, otherwise by created_at
+        processed_transcript.sort(key=lambda x: (x["created_at"], x["timestamp"]))
+        
+        return {
+            "status": "success",
+            "message": f"Retrieved {total_entries} transcript entries",
+            "meeting_info": {
+                "meeting_id": str(meeting_id),
+                "title": meeting["title"],
+                "scheduled_at": meeting["scheduled_at"],
+                "meeting_status": meeting["meeting_status"],
+                "bot_id": meeting.get("bot_id")
+            },
+            "transcript": processed_transcript,
+            "metadata": {
+                "total_entries": total_entries,
+                "transcript_sources": len(transcripts),
+                "has_transcript": total_entries > 0
+            }
+        }
+        
+    except Exception as e:
+        print(f"Error getting meeting transcript: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+"""
+[GET]
+/meetings/{meeting_id}/transcript/raw:
+Get the raw transcript data for a specific meeting (for debugging/advanced use).
+
+Args:
+    meeting_id (uuid.UUID): Meeting ID.
+    supabase (Client): Supabase client (injected).
+
+Returns:
+    dict: Raw meeting transcript data as stored in the database.
+"""
+@router.get("/{meeting_id}/transcript/raw")
+def get_meeting_transcript_raw(meeting_id: uuid.UUID, supabase: Client = Depends(get_supabase)):
+    try:
+        # Verify meeting exists
+        meeting_response = supabase.table("meetings").select("*").eq("meeting_id", str(meeting_id)).execute()
+        if not meeting_response.data:
+            raise HTTPException(status_code=404, detail="Meeting not found")
+        
+        meeting = meeting_response.data[0]
+        
+        # Get raw transcripts for the meeting
+        transcript_response = supabase.table("meeting_transcripts") \
+            .select("*") \
+            .eq("meeting_id", str(meeting_id)) \
+            .order("created_at", desc=False) \
+            .execute()
+        
+        transcripts = transcript_response.data if transcript_response.data else []
+        
+        return {
+            "status": "success",
+            "meeting_info": {
+                "meeting_id": str(meeting_id),
+                "title": meeting["title"],
+                "scheduled_at": meeting["scheduled_at"],
+                "meeting_status": meeting["meeting_status"],
+                "bot_id": meeting.get("bot_id")
+            },
+            "raw_transcripts": transcripts,
+            "metadata": {
+                "transcript_count": len(transcripts),
+                "has_transcript": len(transcripts) > 0
+            }
+        }
+        
+    except Exception as e:
+        print(f"Error getting raw meeting transcript: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 

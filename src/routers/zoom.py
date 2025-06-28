@@ -478,7 +478,7 @@ async def generate_meeting_link_with_recording(
         # Update meeting with bot information for AI processing
         supabase.table("meetings") \
             .update({
-                "recall_bot_id": recording_result["botId"],
+                "bot_id": recording_result["botId"],
                 "ai_processing_enabled": True
             }) \
             .eq("meeting_id", str(meeting_id)) \
@@ -534,7 +534,7 @@ async def start_meeting_with_ai_processing(
             raise HTTPException(status_code=404, detail="Meeting not found")
         
         meeting = meeting_response.data[0]
-        bot_id = meeting.get("recall_bot_id")
+        bot_id = meeting.get("bot_id")
         
         if not bot_id:
             raise HTTPException(status_code=400, detail="No recording bot found for this meeting")
