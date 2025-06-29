@@ -252,16 +252,48 @@ def get_project_meetings(project_id: uuid.UUID, supabase: Client = Depends(get_s
         .eq("project_id", str(project_id)) \
         .execute()
     
-    return [{
-        "meeting_id": m["meeting_id"],
-        "title": m["title"],
-        "description": m["description"],
-        "scheduled_at": m["scheduled_at"],
-        "meeting_status": m["meeting_status"],
-        "created_at": m["created_at"],
-        "created_by": m["created_by"],
-        "bot_id": m["bot_id"]  # Include bot ID in response
-    } for m in meetings_response.data]
+    # For each meeting, get participant data (emails/names)
+    meetings_with_participants = []
+    for meeting in meetings_response.data:
+        # Get participants for this meeting
+        participants_response = supabase.table("meeting_participants") \
+            .select("email, role, status, user_id, users(first_name, last_name)") \
+            .eq("meeting_id", meeting["meeting_id"]) \
+            .execute()
+        
+        # Format participants data
+        participants = []
+        for participant in participants_response.data or []:
+            participant_data = {
+                "email": participant["email"],
+                "role": participant["role"],
+                "status": participant["status"],
+                "user_id": participant["user_id"]
+            }
+            
+            # Add name if user exists
+            if participant.get("users"):
+                participant_data["name"] = f"{participant['users']['first_name']} {participant['users']['last_name']}"
+            else:
+                # If no user record, use email as name
+                participant_data["name"] = participant["email"]
+            
+            participants.append(participant_data)
+        
+        meeting_data = {
+            "meeting_id": meeting["meeting_id"],
+            "title": meeting["title"],
+            "description": meeting["description"],
+            "scheduled_at": meeting["scheduled_at"],
+            "meeting_status": meeting["meeting_status"],
+            "created_at": meeting["created_at"],
+            "created_by": meeting["created_by"],
+            "bot_id": meeting["bot_id"],
+            "participants": participants
+        }
+        meetings_with_participants.append(meeting_data)
+    
+    return meetings_with_participants
 
 
 

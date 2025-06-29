@@ -464,28 +464,31 @@ async def process_structured_summary(
 @router.get("/structured-summary/{meeting_id}")
 async def get_structured_summary(
     meeting_id: str,
+    user_id: str = Query(..., description="User ID requesting the summary"),
     supabase: Client = Depends(get_supabase)
 ):
     """
-    Get structured summary for a meeting.
+    Get structured summary for a meeting with user role information.
     
     Args:
         meeting_id (str): ID of the meeting
+        user_id (str): ID of the user requesting the summary
         supabase (Client): Supabase client
         
     Returns:
-        dict: Structured summary and components
+        dict: Structured summary and components with user role
             {
                 "status": str,
                 "summary": dict,
                 "action_items": list,
                 "decisions": list,
                 "discussions": list,
-                "created_at": str
+                "created_at": str,
+                "user_role": str  # "host" or "participant"
             }
     """
     try:
-        print(f"Getting structured summary for meeting: {meeting_id}")
+        print(f"Getting structured summary for meeting: {meeting_id}, user: {user_id}")
         
         # Verify meeting exists
         meeting_response = supabase.table("meetings") \
@@ -497,7 +500,43 @@ async def get_structured_summary(
             print(f"Meeting not found: {meeting_id}")
             raise HTTPException(status_code=404, detail="Meeting not found")
         
-        print(f"Meeting found: {meeting_response.data[0]['title']}")
+        meeting = meeting_response.data[0]
+        print(f"Meeting found: {meeting['title']}")
+        
+        # Determine user role in this meeting
+        user_role = "participant"  # default
+        
+        # Check if user is the meeting host (created_by)
+        if meeting.get("created_by") == user_id:
+            user_role = "host"
+        else:
+            # Check if user is a participant
+            participant_response = supabase.table("meeting_participants") \
+                .select("role") \
+                .eq("meeting_id", meeting_id) \
+                .eq("user_id", user_id) \
+                .execute()
+            
+            if participant_response.data:
+                # Use the role from meeting_participants table
+                participant_role = participant_response.data[0].get("role", "participant")
+                # Map Creator role to host, others remain as participant
+                if participant_role.lower() == "creator":
+                    user_role = "host"
+                else:
+                    user_role = "participant"
+            else:
+                # User is not a participant, check if they have access through project membership
+                project_member_response = supabase.table("meetings") \
+                    .select("*, projects!inner(project_members!inner(*))") \
+                    .eq("meeting_id", meeting_id) \
+                    .eq("projects.project_members.user_id", user_id) \
+                    .execute()
+                
+                if not project_member_response.data:
+                    raise HTTPException(status_code=403, detail="Access denied: User is not a participant or project member")
+        
+        print(f"User role determined: {user_role}")
         
         # Get structured summary
         result = await ai_summary_pipeline.get_meeting_summary(meeting_id, supabase)
@@ -513,8 +552,13 @@ async def get_structured_summary(
             print(f"No summary found for meeting: {meeting_id}")
             raise HTTPException(status_code=404, detail="No summary found for this meeting")
         
+        # Add user role to the response
+        result["user_role"] = user_role
+        
         return result
         
+    except HTTPException:
+        raise
     except Exception as e:
         print(f"Error retrieving structured summary: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to retrieve structured summary: {str(e)}")

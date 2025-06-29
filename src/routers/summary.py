@@ -115,6 +115,64 @@ async def get_edit_requests(
     edits = supabase.table("summary_edit_requests").select("*").eq("meeting_id", meeting_id).order("created_at", desc=False).execute().data
     return {"edit_requests": edits}
 
+# --- Get Edit Request by Edit ID with Original Summary ---
+@router.get("/edit-requests/")
+async def get_edit_request_by_id(
+    edit_id: str = Query(..., description="Edit request ID"),
+    supabase: Client = Depends(get_supabase)
+):
+    """
+    Get edit request by edit_id and return the edited data along with original summary.
+    
+    Args:
+        edit_id (str): The edit request ID
+        supabase (Client): Supabase client
+        
+    Returns:
+        dict: Edit request data with original summary
+            {
+                "edit_request": dict,
+                "original_summary": dict,
+                "status": str
+            }
+    """
+    try:
+        # Get the edit request by edit_id
+        edit_response = supabase.table("summary_edit_requests") \
+            .select("*") \
+            .eq("edit_id", edit_id) \
+            .execute()
+        
+        if not edit_response.data:
+            raise HTTPException(status_code=404, detail="Edit request not found")
+        
+        edit_request = edit_response.data[0]
+        meeting_id = edit_request["meeting_id"]
+        
+        # Get the original summary from meeting_summaries table
+        summary_response = supabase.table("meeting_summaries") \
+            .select("*") \
+            .eq("meeting_id", meeting_id) \
+            .order("created_at", desc=True) \
+            .limit(1) \
+            .execute()
+        
+        original_summary = None
+        if summary_response.data:
+            original_summary = summary_response.data[0]
+        
+        return {
+            "status": "success",
+            "edit_request": edit_request,
+            "original_summary": original_summary
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"Error getting edit request by ID: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to get edit request: {str(e)}")
+
 @router.patch("/direct-update")
 async def direct_update_summary(
     meeting_id: str = Query(...),

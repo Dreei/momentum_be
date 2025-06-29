@@ -7,6 +7,7 @@ from core.config import GEMINI_API_KEY
 from database.base import get_supabase
 from supabase import Client
 import google.generativeai as genai
+import uuid
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 
@@ -230,7 +231,7 @@ Return ONLY the JSON object, no additional text.
             summary_response = supabase.table("meeting_summaries").insert(summary_data).execute()
             
             # Save individual components to separate tables
-            await self._save_summary_components(meeting_id, structured_summary, supabase)
+            await self._save_summary_components(meeting_id, structured_summary, supabase, summary_response.data[0]["summary_id"] if summary_response.data else None)
             
             return {
                 "status": "success",
@@ -252,21 +253,51 @@ Return ONLY the JSON object, no additional text.
         self, 
         meeting_id: str, 
         structured_summary: Dict[str, Any], 
-        supabase: Client
+        supabase: Client,
+        summary_id: str = None
     ):
         """Save individual summary components to separate tables"""
         
         try:
-            # Save action items
+            # Save action items with the required format
             for action_item in structured_summary.get("action_items", []):
+                # Try to find user by email for assigned_to field
+                assigned_to_uuid = None
+                owner_email = action_item.get("owner", "")
+                if owner_email:
+                    user_response = supabase.table("users") \
+                        .select("user_id") \
+                        .eq("email", owner_email) \
+                        .execute()
+                    if user_response.data:
+                        assigned_to_uuid = str(user_response.data[0]["user_id"])
+                
+                # Parse due_date if provided
+                due_date = None
+                if action_item.get("due_date"):
+                    try:
+                        # If it's already in ISO format, keep it; otherwise try to parse
+                        if "T" in action_item.get("due_date", ""):
+                            due_date = action_item.get("due_date")
+                        else:
+                            # Assume YYYY-MM-DD format and convert to ISO
+                            parsed_date = datetime.strptime(action_item.get("due_date"), "%Y-%m-%d")
+                            due_date = parsed_date.replace(hour=23, minute=59, second=59).isoformat() + "Z"
+                    except:
+                        # If parsing fails, set to None
+                        due_date = None
+                
                 action_data = {
+                    "summary_id": summary_id,  # Link to meeting_summaries table
                     "meeting_id": meeting_id,
                     "description": action_item.get("description", ""),
-                    "owner": action_item.get("owner", ""),
-                    "due_date": action_item.get("due_date"),
+                    "owner": owner_email,
+                    "assigned_to": assigned_to_uuid,
+                    "due_date": due_date,
                     "priority": action_item.get("priority", "medium"),
                     "status": action_item.get("status", "pending"),
-                    "created_at": datetime.utcnow().isoformat()
+                    "created_at": datetime.utcnow().isoformat() + "Z",
+                    "completed_at": None
                 }
                 supabase.table("action_items").insert(action_data).execute()
             
