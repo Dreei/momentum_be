@@ -14,39 +14,40 @@ async def get_user_notifications(
     only_unread: bool = Query(False),
     supabase: Client = Depends(get_supabase)
 ):
-    # Build query with joins to get related data
-    select_fields = """
-        *,
-        meetings!inner(
-            title,
-            project_id,
-            projects!inner(
-                project_name,
-                org_id,
-                organizations!inner(
-                    org_name
-                )
-            ),
-            users!meetings_created_by_fkey(
-                first_name,
-                last_name
-            )
-        )
-    """
-    
-    query = supabase.table("notifications").select(select_fields).eq("user_id", user_id)
+    # First, get the notifications for the user
+    query = supabase.table("notifications").select("*").eq("user_id", user_id)
     if only_unread:
         query = query.eq("status", "unread")
     
-    response = query.order("created_at", desc=True).execute()
+    notifications_response = query.order("created_at", desc=True).execute()
     
-    # Transform the data to flatten the nested structure
+    # Transform each notification by fetching related data
     notifications = []
-    for notification in response.data:
-        meeting = notification.get("meetings", {})
-        project = meeting.get("projects", {}) if meeting else {}
-        organization = project.get("organizations", {}) if project else {}
-        creator = meeting.get("users", {}) if meeting else {}
+    for notification in notifications_response.data:
+        # Get meeting details
+        meeting_response = supabase.table("meetings").select("title, project_id").eq("meeting_id", notification["meeting_id"]).execute()
+        meeting = meeting_response.data[0] if meeting_response.data else {}
+        
+        # Get project details
+        project = {}
+        if meeting.get("project_id"):
+            project_response = supabase.table("projects").select("project_name, org_id").eq("project_id", meeting["project_id"]).execute()
+            project = project_response.data[0] if project_response.data else {}
+        
+        # Get organization details
+        organization = {}
+        if project.get("org_id"):
+            org_response = supabase.table("organizations").select("org_name").eq("org_id", project["org_id"]).execute()
+            organization = org_response.data[0] if org_response.data else {}
+        
+        # Get creator details from summary_edit_requests
+        creator = {}
+        if notification.get("edit_request_id"):
+            edit_request_response = supabase.table("summary_edit_requests").select("proposed_by").eq("edit_id", notification["edit_request_id"]).execute()
+            if edit_request_response.data:
+                proposed_by = edit_request_response.data[0]["proposed_by"]
+                user_response = supabase.table("users").select("first_name, last_name").eq("user_id", proposed_by).execute()
+                creator = user_response.data[0] if user_response.data else {}
         
         transformed_notification = {
             "notification_id": notification.get("notification_id"),
