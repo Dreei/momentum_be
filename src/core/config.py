@@ -79,7 +79,7 @@ class Settings:
     RECALL_API_TOKEN: str = os.getenv("RECALL_API_TOKEN", "")
     RECALL_BOT_NAME: str = os.getenv("RECALL_BOT_NAME", "Momentum Notetaker")
     RECALL_WEBHOOK_SECRET: str = os.getenv("RECALL_WEBHOOK_SECRET", "")
-    RECALL_BASE_URL: str = "https://us-west-2.recall.ai"
+    RECALL_BASE_URL: str = os.getenv("RECALL_BASE_URL", "https://us-west-2.recall.ai")
     RECALL_WEBHOOK_URL: str = os.getenv("RECALL_WEBHOOK_URL", "")
     
     # Logging Configuration

@@ -6,7 +6,7 @@ import re
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 import uuid
-from core.config import RECALL_API_TOKEN, RECALL_BOT_NAME, RECALL_WEBHOOK_SECRET, RECALL_BASE_URL, GEMINI_API_KEY
+from core.config import RECALL_API_TOKEN, RECALL_BOT_NAME, RECALL_WEBHOOK_SECRET, RECALL_WEBHOOK_URL, RECALL_BASE_URL, GEMINI_API_KEY
 from database.base import get_supabase
 from supabase import Client
 
@@ -18,6 +18,7 @@ class RecallAIService:
         self.api_token = RECALL_API_TOKEN
         self.bot_name = RECALL_BOT_NAME
         self.webhook_secret = RECALL_WEBHOOK_SECRET
+        self.webhook_url = RECALL_WEBHOOK_URL
         
     def _get_headers(self) -> Dict[str, str]:
         """Get headers for Recall.ai API requests"""
@@ -74,7 +75,7 @@ class RecallAIService:
                     "realtime_endpoints": [
                         {
                             "type": "webhook",
-                            "url": f"{webhook_url}?secret={self.webhook_secret}",
+                            "url": f"{self.webhook_url}?secret={self.webhook_secret}",
                             "events": [
                                 "transcript.partial_data",
                                 "transcript.data",
